@@ -1,611 +1,324 @@
-// ======================================
-// CONFIGURACIÓN
-// ======================================
-
-const CODIGO_USUARIO = "1234";
-const CODIGO_DUENO = "4321";
-const CLAVE_REGISTROS = "registros";
-
-const campo = id => document.getElementById(id);
-
-let rolSesion = "";
-let registros = obtenerRegistros();
+let codigoActual = "";
+let rolActual = "";
 let registroSeleccionado = null;
-let editando = false;
+let registrosTabla = [];
 
+const $ = id => document.getElementById(id);
 
-// ======================================
-// ALMACENAMIENTO
-// ======================================
+const campos = [
+  "cedula", "nombre1", "nombre2",
+  "apellido1", "apellido2", "telefono", "direccion"
+];
 
-function obtenerRegistros() {
-    try {
-        const datos = JSON.parse(
-            localStorage.getItem(CLAVE_REGISTROS) || "[]"
-        );
-
-        return Array.isArray(datos) ? datos : [];
-    } catch (error) {
-        console.error("Error leyendo registros:", error);
-        return [];
-    }
+function mostrarMensaje(texto, acceso = false) {
+  const elemento = $(acceso ? "mensajeAcceso" : "mensaje");
+  if (elemento) elemento.textContent = texto;
 }
 
-function guardarEnNavegador() {
-    try {
-        localStorage.setItem(
-            CLAVE_REGISTROS,
-            JSON.stringify(registros)
-        );
-
-        return true;
-    } catch (error) {
-        console.error("Error guardando registros:", error);
-
-        alert("No se pudieron guardar los registros en el navegador.");
-        return false;
-    }
+async function ejecutar(action, extra = {}) {
+  if (!codigoActual) throw new Error("Primero inicia sesión.");
+  return llamarServidor(codigoActual, action, extra);
 }
 
+async function iniciarSesion(evento) {
+  evento.preventDefault();
 
-// ======================================
-// INICIO DE SESIÓN
-// ======================================
+  const codigo = $("codigoAcceso").value.trim();
+  mostrarMensaje("Verificando código...", true);
 
-campo("formularioAcceso").addEventListener("submit", function (evento) {
-    evento.preventDefault();
+  try {
+    const respuesta = await llamarServidor(codigo, "login");
 
-    const codigo = campo("codigoAcceso").value.trim();
+    codigoActual = codigo;
+    rolActual = respuesta.role;
 
-    if (codigo === CODIGO_DUENO) {
-        rolSesion = "dueno";
-    } else if (codigo === CODIGO_USUARIO) {
-        rolSesion = "usuario";
-    } else {
-        campo("errorAcceso").hidden = false;
-        campo("codigoAcceso").select();
-        return;
-    }
+    $("paginaAcceso").hidden = true;
+    $("paginaFormulario").hidden = false;
+    $("rolUsuario").textContent =
+      rolActual === "dueno" ? "Sesión del dueño" : "Sesión de usuario";
 
-    campo("errorAcceso").hidden = true;
-    campo("paginaAcceso").hidden = true;
-    campo("sistema").hidden = false;
-
-    campo("rolActual").textContent =
-        rolSesion === "dueno" ? "Sesión del dueño" : "Sesión de usuario";
-
-    campo("zonaPropietario").hidden = rolSesion !== "dueno";
-
-    campo("activar").checked = false;
-    activarFormulario();
-
-    campo("panelTabla").hidden = true;
-    campo("mostrarTabla").textContent = "▤ Mostrar tabla";
-    campo("buscarTabla").value = "";
-    campo("codigoAcceso").value = "";
-
-    limpiarFormulario();
-
-    // Volver a leer los registros y actualizar el contador.
-    registros = obtenerRegistros();
-    actualizarInterfaz();
-});
-
-
-// ======================================
-// CERRAR SESIÓN
-// ======================================
-
-campo("cerrarSesion").addEventListener("click", function () {
-    rolSesion = "";
+    $("zonaPropietario").hidden = rolActual !== "dueno";
+    $("panelTabla").hidden = true;
+    $("mostrarTabla").textContent = "Mostrar tabla";
+    $("formRegistro").reset();
     registroSeleccionado = null;
-    editando = false;
 
-    campo("activar").checked = false;
-    activarFormulario();
-    limpiarFormulario();
+    await actualizarTotal();
+    mostrarMensaje("Sesión iniciada correctamente.");
+  } catch (error) {
+    codigoActual = "";
+    rolActual = "";
+    mostrarMensaje(error.message, true);
+  }
+}
 
-    campo("panelTabla").hidden = true;
-    campo("mostrarTabla").textContent = "▤ Mostrar tabla";
-    campo("buscarTabla").value = "";
+async function cerrarSesion() {
+  codigoActual = "";
+  rolActual = "";
+  registroSeleccionado = null;
+  registrosTabla = [];
 
-    campo("zonaPropietario").hidden = true;
-    campo("sistema").hidden = true;
-    campo("paginaAcceso").hidden = false;
+  $("formAcceso").reset();
+  $("formRegistro").reset();
+  $("paginaFormulario").hidden = true;
+  $("paginaAcceso").hidden = false;
+  $("zonaPropietario").hidden = true;
+  $("panelTabla").hidden = true;
+  $("cuerpoTabla").replaceChildren();
 
-    campo("codigoAcceso").value = "";
-    campo("errorAcceso").hidden = true;
-    campo("codigoAcceso").focus();
-});
+  mostrarMensaje("", true);
+}
 
+function leerFormulario() {
+  return Object.fromEntries(
+    campos.map(campo => [campo, $(campo).value.trim()])
+  );
+}
 
-// ======================================
-// ACTIVAR FORMULARIO
-// ======================================
+function limpiarCampos() {
+  $("formRegistro").reset();
+  registroSeleccionado = null;
+  mostrarMensaje("");
+}
 
-function activarFormulario() {
-    const activo = campo("activar").checked;
+async function guardarRegistro(evento) {
+  evento.preventDefault();
 
-    [
-        "cedula",
-        "nombre1",
-        "nombre2",
-        "apellido1",
-        "apellido2",
-        "telefono",
-        "direccion"
-    ].forEach(id => {
-        campo(id).disabled = !activo;
+  try {
+    const registro = leerFormulario();
+    const obligatorios = [
+      "cedula", "nombre1", "apellido1", "telefono", "direccion"
+    ];
+
+    if (obligatorios.some(campo => !registro[campo])) {
+      throw new Error("Completa los campos obligatorios.");
+    }
+
+    await ejecutar("create", { registro });
+
+    limpiarCampos();
+    mostrarMensaje("Registro guardado correctamente.");
+    await actualizarTotal();
+    if (rolActual === "dueno" && !$("panelTabla").hidden) {
+      await cargarTabla();
+    }
+  } catch (error) {
+    mostrarMensaje(error.message);
+  }
+}
+
+async function consultarRegistro() {
+  try {
+    const cedula = $("cedula").value.trim();
+    if (!cedula) throw new Error("Escribe la cédula que deseas consultar.");
+
+    const respuesta = await ejecutar("get", { cedula });
+
+    if (!respuesta.data) {
+      registroSeleccionado = null;
+      throw new Error("No se encontró esa cédula.");
+    }
+
+    registroSeleccionado = respuesta.data;
+    for (const campo of campos) {
+      $(campo).value = respuesta.data[campo] ?? "";
+    }
+
+    mostrarMensaje("Registro encontrado.");
+  } catch (error) {
+    mostrarMensaje(error.message);
+  }
+}
+
+async function editarRegistro() {
+  try {
+    if (!registroSeleccionado) {
+      throw new Error("Primero consulta o carga un registro.");
+    }
+
+    const registro = leerFormulario();
+    const respuesta = await ejecutar("update", {
+      id: registroSeleccionado.id,
+      registro
     });
 
-    [
-        "guardar",
-        "consultar",
-        "editar",
-        "eliminar",
-        "limpiar"
-    ].forEach(id => {
-        campo(id).disabled = !activo;
-    });
+    registroSeleccionado = respuesta.data;
+    mostrarMensaje("Registro actualizado correctamente.");
+    await actualizarTotal();
 
-    mostrarMensaje(
-        activo
-            ? "Formulario activado. Ya puedes trabajar."
-            : "Activa el formulario para comenzar.",
-        ""
-    );
+    if (rolActual === "dueno" && !$("panelTabla").hidden) {
+      await cargarTabla();
+    }
+  } catch (error) {
+    mostrarMensaje(error.message);
+  }
 }
 
-campo("activar").addEventListener("change", activarFormulario);
+async function eliminarRegistro() {
+  try {
+    if (!registroSeleccionado) {
+      throw new Error("Primero consulta o carga un registro.");
+    }
 
+    if (!confirm("¿Seguro que deseas eliminar este registro?")) return;
 
-// ======================================
-// DATOS Y VALIDACIÓN
-// ======================================
+    await ejecutar("delete", { id: registroSeleccionado.id });
 
-function obtenerDatosFormulario() {
-    return {
-        cedula: campo("cedula").value.trim(),
-        nombre1: campo("nombre1").value.trim(),
-        nombre2: campo("nombre2").value.trim(),
-        apellido1: campo("apellido1").value.trim(),
-        apellido2: campo("apellido2").value.trim(),
-        telefono: campo("telefono").value.trim(),
-        direccion: campo("direccion").value.trim()
-    };
+    limpiarCampos();
+    mostrarMensaje("Registro eliminado correctamente.");
+    await actualizarTotal();
+
+    if (rolActual === "dueno" && !$("panelTabla").hidden) {
+      await cargarTabla();
+    }
+  } catch (error) {
+    mostrarMensaje(error.message);
+  }
 }
 
-function validarFormulario() {
-    if (!campo("formularioRegistro").reportValidity()) {
-        return false;
-    }
-
-    const datos = obtenerDatosFormulario();
-
-    if (
-        !datos.cedula ||
-        !datos.nombre1 ||
-        !datos.apellido1 ||
-        !datos.telefono ||
-        !datos.direccion
-    ) {
-        mostrarMensaje("Completa todos los campos obligatorios.", "error");
-        return false;
-    }
-
-    return true;
-}
-
-
-// ======================================
-// GUARDAR Y EDITAR
-// ======================================
-
-campo("guardar").addEventListener("click", function () {
-    if (!validarFormulario()) return;
-
-    // Leer los últimos datos antes de modificarlos.
-    registros = obtenerRegistros();
-
-    const datos = obtenerDatosFormulario();
-    const estabaEditando = editando;
-
-    const indiceExistente = registros.findIndex(
-        registro => registro.cedula === datos.cedula
-    );
-
-    if (!estabaEditando && indiceExistente !== -1) {
-        mostrarMensaje(
-            "Ya existe un registro con esa cédula. Usa Consultar.",
-            "error"
-        );
-        return;
-    }
-
-    if (
-        estabaEditando &&
-        indiceExistente !== -1 &&
-        datos.cedula !== registroSeleccionado
-    ) {
-        mostrarMensaje("Esa cédula pertenece a otro registro.", "error");
-        return;
-    }
-
-    const anteriores = registros.map(registro => ({ ...registro }));
-
-    if (estabaEditando) {
-        const indiceOriginal = registros.findIndex(
-            registro => registro.cedula === registroSeleccionado
-        );
-
-        if (indiceOriginal === -1) {
-            mostrarMensaje("No se encontró el registro que vas a editar.", "error");
-            return;
-        }
-
-        registros[indiceOriginal] = datos;
+async function actualizarTotal() {
+  try {
+    if (rolActual === "dueno") {
+      const respuesta = await ejecutar("list");
+      $("totalRegistros").textContent =
+        `Total registrados: ${respuesta.data.length}`;
     } else {
-        registros.push(datos);
+      $("totalRegistros").textContent =
+        "Registros disponibles en el sistema compartido";
     }
-
-    if (!guardarEnNavegador()) {
-        registros = anteriores;
-        actualizarInterfaz();
-        return;
-    }
-
-    limpiarFormulario();
-    actualizarInterfaz();
-
-    mostrarMensaje(
-        estabaEditando
-            ? "Registro actualizado correctamente."
-            : "Registro guardado correctamente.",
-        "exito"
-    );
-});
-
-
-// ======================================
-// CONSULTAR
-// ======================================
-
-campo("consultar").addEventListener("click", function () {
-    const cedula = campo("cedula").value.trim();
-
-    if (!cedula) {
-        mostrarMensaje("Escribe una cédula para consultar.", "error");
-        campo("cedula").focus();
-        return;
-    }
-
-    registros = obtenerRegistros();
-
-    const registro = registros.find(persona => persona.cedula === cedula);
-
-    if (!registro) {
-        registroSeleccionado = null;
-        editando = false;
-        mostrarMensaje("No se encontró un registro con esa cédula.", "error");
-        return;
-    }
-
-    cargarRegistroEnFormulario(registro);
-    registroSeleccionado = registro.cedula;
-    editando = false;
-
-    mostrarMensaje("Registro encontrado.", "exito");
-});
-
-
-// ======================================
-// CARGAR DATOS
-// ======================================
-
-function cargarRegistroEnFormulario(registro) {
-    campo("cedula").value = registro.cedula || "";
-    campo("nombre1").value = registro.nombre1 || "";
-    campo("nombre2").value = registro.nombre2 || "";
-    campo("apellido1").value = registro.apellido1 || "";
-    campo("apellido2").value = registro.apellido2 || "";
-    campo("telefono").value = registro.telefono || "";
-    campo("direccion").value = registro.direccion || "";
+  } catch (error) {
+    mostrarMensaje(error.message);
+  }
 }
 
+async function alternarTabla() {
+  if (rolActual !== "dueno") return;
 
-// ======================================
-// PREPARAR EDICIÓN
-// ======================================
+  const panel = $("panelTabla");
+  panel.hidden = !panel.hidden;
+  $("mostrarTabla").textContent =
+    panel.hidden ? "Mostrar tabla" : "Ocultar tabla";
 
-campo("editar").addEventListener("click", function () {
-    registros = obtenerRegistros();
-
-    const cedula = campo("cedula").value.trim();
-    const registro = registros.find(persona => persona.cedula === cedula);
-
-    if (!registro) {
-        mostrarMensaje("Consulta primero un registro existente.", "error");
-        return;
-    }
-
-    registroSeleccionado = registro.cedula;
-    editando = true;
-
-    mostrarMensaje(
-        "Modifica los datos y pulsa Guardar para confirmar.",
-        "exito"
-    );
-});
-
-
-// ======================================
-// ELIMINAR DESDE EL FORMULARIO
-// ======================================
-
-campo("eliminar").addEventListener("click", function () {
-    const cedula = campo("cedula").value.trim();
-
-    if (!cedula) {
-        mostrarMensaje("Escribe la cédula que deseas eliminar.", "error");
-        return;
-    }
-
-    eliminarRegistro(cedula);
-});
-
-
-// ======================================
-// LIMPIAR FORMULARIO
-// ======================================
-
-campo("limpiar").addEventListener("click", function () {
-    limpiarFormulario();
-    mostrarMensaje("Campos limpiados correctamente.", "exito");
-});
-
-function limpiarFormulario() {
-    campo("formularioRegistro").reset();
-    registroSeleccionado = null;
-    editando = false;
+  if (!panel.hidden) await cargarTabla();
 }
 
+async function cargarTabla() {
+  if (rolActual !== "dueno") return;
 
-// ======================================
-// MENSAJES
-// ======================================
-
-function mostrarMensaje(texto, tipo) {
-    const mensaje = campo("mensaje");
-
-    mensaje.textContent = texto;
-    mensaje.className = "mensaje";
-
-    if (tipo) {
-        mensaje.classList.add(tipo);
-    }
-}
-
-
-// ======================================
-// ACTUALIZAR INTERFAZ
-// ======================================
-
-function actualizarInterfaz() {
-    registros = obtenerRegistros();
-    campo("total").textContent = registros.length;
+  try {
+    const respuesta = await ejecutar("list");
+    registrosTabla = respuesta.data || [];
     dibujarTabla();
+  } catch (error) {
+    mostrarMensaje(error.message);
+  }
 }
 
-
-// ======================================
-// MOSTRAR / OCULTAR TABLA
-// ======================================
-
-campo("mostrarTabla").addEventListener("click", function () {
-    if (rolSesion !== "dueno") return;
-
-    const panel = campo("panelTabla");
-    panel.hidden = !panel.hidden;
-
-    campo("mostrarTabla").textContent = panel.hidden
-        ? "▤ Mostrar tabla"
-        : "▤ Ocultar tabla";
-
-    if (!panel.hidden) {
-        // Cargar los datos guardados cada vez que se abre la tabla.
-        registros = obtenerRegistros();
-        dibujarTabla();
-    }
-});
-
-
-// ======================================
-// DIBUJAR TABLA Y BUSCAR
-// ======================================
-
-campo("buscarTabla").addEventListener("input", dibujarTabla);
+function agregarCelda(fila, valor) {
+  const celda = document.createElement("td");
+  celda.textContent = valor ?? "";
+  fila.appendChild(celda);
+  return celda;
+}
 
 function dibujarTabla() {
-    const cuerpo = campo("cuerpoTabla");
-    const busqueda = campo("buscarTabla").value.trim().toLowerCase();
+  const cuerpo = $("cuerpoTabla");
+  cuerpo.replaceChildren();
 
-    // Recuperar los registros directamente del navegador.
-    registros = obtenerRegistros();
+  const busqueda = $("buscarTabla").value.trim().toLowerCase();
 
-    cuerpo.replaceChildren();
+  const filtrados = registrosTabla.filter(r =>
+    campos.some(campo =>
+      String(r[campo] ?? "").toLowerCase().includes(busqueda)
+    )
+  );
 
-    const filtrados = registros.filter(registro =>
-        Object.values(registro).some(valor =>
-            String(valor ?? "").toLowerCase().includes(busqueda)
-        )
-    );
+  for (const registro of filtrados) {
+    const fila = document.createElement("tr");
 
-    filtrados.forEach(registro => {
-        const fila = document.createElement("tr");
+    agregarCelda(fila, registro.cedula);
+    agregarCelda(fila, [registro.nombre1, registro.nombre2].filter(Boolean).join(" "));
+    agregarCelda(fila, [registro.apellido1, registro.apellido2].filter(Boolean).join(" "));
+    agregarCelda(fila, registro.telefono);
+    agregarCelda(fila, registro.direccion);
 
-        [
-            "cedula",
-            "nombre1",
-            "nombre2",
-            "apellido1",
-            "apellido2",
-            "telefono",
-            "direccion"
-        ].forEach(columna => {
-            const celda = document.createElement("td");
-            celda.textContent = registro[columna] || "—";
-            fila.appendChild(celda);
-        });
+    const acciones = agregarCelda(fila, "");
 
-        const celdaAcciones = document.createElement("td");
-        const acciones = document.createElement("div");
-        acciones.className = "acciones-fila";
+    const cargar = document.createElement("button");
+    cargar.textContent = "Cargar";
+    cargar.type = "button";
+    cargar.onclick = () => {
+      registroSeleccionado = registro;
+      for (const campo of campos) {
+        $(campo).value = registro[campo] ?? "";
+      }
+      mostrarMensaje("Registro cargado. Puedes actualizarlo o eliminarlo.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
 
-        const botonEditar = document.createElement("button");
-        botonEditar.type = "button";
-        botonEditar.className = "boton-fila";
-        botonEditar.textContent = "Editar";
+    const eliminar = document.createElement("button");
+    eliminar.textContent = "Eliminar";
+    eliminar.type = "button";
+    eliminar.className = "peligro";
+    eliminar.onclick = async () => {
+      registroSeleccionado = registro;
+      await eliminarRegistro();
+    };
 
-        botonEditar.addEventListener("click", function () {
-            if (rolSesion !== "dueno") return;
+    acciones.append(cargar, eliminar);
+    cuerpo.appendChild(fila);
+  }
 
-            campo("activar").checked = true;
-            activarFormulario();
-            cargarRegistroEnFormulario(registro);
-
-            registroSeleccionado = registro.cedula;
-            editando = true;
-
-            campo("formularioRegistro").scrollIntoView({
-                behavior: "smooth",
-                block: "center"
-            });
-
-            mostrarMensaje(
-                "Modifica los datos y pulsa Guardar.",
-                "exito"
-            );
-        });
-
-        const botonEliminar = document.createElement("button");
-        botonEliminar.type = "button";
-        botonEliminar.className = "boton-fila eliminar-fila";
-        botonEliminar.textContent = "Eliminar";
-
-        botonEliminar.addEventListener("click", function () {
-            if (rolSesion !== "dueno") return;
-            eliminarRegistro(registro.cedula);
-        });
-
-        acciones.append(botonEditar, botonEliminar);
-        celdaAcciones.appendChild(acciones);
-        fila.appendChild(celdaAcciones);
-        cuerpo.appendChild(fila);
-    });
-
-    campo("tablaVacia").hidden = filtrados.length > 0;
-    campo("total").textContent = registros.length;
+  if (!filtrados.length) {
+    const fila = document.createElement("tr");
+    const celda = agregarCelda(fila, "No hay registros para mostrar.");
+    celda.colSpan = 6;
+    cuerpo.appendChild(fila);
+  }
 }
 
+async function descargarExcel() {
+  if (rolActual !== "dueno") {
+    mostrarMensaje("Solo el dueño puede descargar Excel.");
+    return;
+  }
 
-// ======================================
-// ELIMINAR REGISTRO
-// ======================================
+  try {
+    const respuesta = await ejecutar("list");
+    const registros = respuesta.data || [];
 
-function eliminarRegistro(cedula) {
-    registros = obtenerRegistros();
-
-    const registro = registros.find(persona => persona.cedula === cedula);
-
-    if (!registro) {
-        mostrarMensaje("No se encontró ese registro.", "error");
-        actualizarInterfaz();
-        return;
+    if (!registros.length) {
+      throw new Error("No hay registros para exportar.");
     }
 
-    if (!confirm(`¿Deseas eliminar el registro con cédula ${cedula}?`)) {
-        return;
-    }
-
-    const anteriores = registros.map(persona => ({ ...persona }));
-
-    registros = registros.filter(persona => persona.cedula !== cedula);
-
-    if (!guardarEnNavegador()) {
-        registros = anteriores;
-        actualizarInterfaz();
-        return;
-    }
-
-    if (registroSeleccionado === cedula) {
-        limpiarFormulario();
-    }
-
-    actualizarInterfaz();
-    mostrarMensaje("Registro eliminado correctamente.", "exito");
-}
-
-
-// ======================================
-// DESCARGAR EXCEL
-// ======================================
-
-campo("descargarExcel").addEventListener("click", descargarExcel);
-
-function descargarExcel() {
-    if (rolSesion !== "dueno") {
-        alert("Solo el dueño puede descargar los registros.");
-        return;
-    }
-
-    // Leer los datos reales guardados, no solamente la tabla visible.
-    registros = obtenerRegistros();
-
-    if (registros.length === 0) {
-        alert(
-            "No hay registros guardados para exportar. " +
-            "Primero guarda una persona en el formulario."
-        );
-        return;
-    }
-
-    if (typeof XLSX === "undefined") {
-        alert(
-            "No se pudo cargar la biblioteca de Excel. " +
-            "Comprueba tu conexión a internet e inténtalo nuevamente."
-        );
-        return;
-    }
-
-    const datosExcel = registros.map(registro => ({
-        "Cédula": registro.cedula || "",
-        "Nombre 1": registro.nombre1 || "",
-        "Nombre 2": registro.nombre2 || "",
-        "Apellido 1": registro.apellido1 || "",
-        "Apellido 2": registro.apellido2 || "",
-        "Teléfono": registro.telefono || "",
-        "Dirección": registro.direccion || ""
+    const filas = registros.map(r => ({
+      "Cédula": r.cedula,
+      "Nombre 1": r.nombre1,
+      "Nombre 2": r.nombre2,
+      "Apellido 1": r.apellido1,
+      "Apellido 2": r.apellido2,
+      "Teléfono": r.telefono,
+      "Dirección": r.direccion
     }));
 
-    const hoja = XLSX.utils.json_to_sheet(datosExcel);
+    const hoja = XLSX.utils.json_to_sheet(filas);
     const libro = XLSX.utils.book_new();
-
     XLSX.utils.book_append_sheet(libro, hoja, "Registros");
-
     XLSX.writeFile(libro, "Registros.xlsx");
+
+    mostrarMensaje("Excel descargado correctamente.");
+  } catch (error) {
+    mostrarMensaje(error.message);
+  }
 }
 
-
-// ======================================
-// INICIALIZACIÓN
-// ======================================
-
-campo("paginaAcceso").hidden = false;
-campo("sistema").hidden = true;
-campo("zonaPropietario").hidden = true;
-campo("panelTabla").hidden = true;
-
-campo("activar").checked = false;
-
-activarFormulario();
-actualizarInterfaz();
+$("formAcceso").addEventListener("submit", iniciarSesion);
+$("formRegistro").addEventListener("submit", guardarRegistro);
+$("cerrarSesion").addEventListener("click", cerrarSesion);
+$("consultar").addEventListener("click", consultarRegistro);
+$("editar").addEventListener("click", editarRegistro);
+$("eliminar").addEventListener("click", eliminarRegistro);
+$("limpiar").addEventListener("click", limpiarCampos);
+$("mostrarTabla").addEventListener("click", alternarTabla);
+$("descargarExcel").addEventListener("click", descargarExcel);
+$("buscarTabla").addEventListener("input", dibujarTabla);

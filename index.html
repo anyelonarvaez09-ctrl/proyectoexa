@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RegistroPro | Sistema de registros</title>
+
+    <link rel="stylesheet" href="estilos.css">
+
+    <!-- Biblioteca de Excel -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="app.js" defer></script>
+</head>
+<body>
+
+    <!-- INICIO DE SESIÓN -->
+    <section id="paginaAcceso" class="pagina-acceso">
+        <div class="tarjeta-acceso">
+            <div class="logo logo-acceso">RP</div>
+            <p class="etiqueta">SISTEMA DE GESTIÓN</p>
+            <h1>Bienvenido a <span>RegistroPro</span></h1>
+            <p class="texto-acceso">Ingresa tu código de acceso para continuar.</p>
+
+            <form id="formularioAcceso">
+                <label for="codigoAcceso">Código de acceso</label>
+                <input
+                    type="password"
+                    id="codigoAcceso"
+                    placeholder="Ingresa tu código"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    required
+                >
+
+                <p id="errorAcceso" class="error-acceso" hidden>
+                    Código incorrecto. Inténtalo nuevamente.
+                </p>
+
+                <button type="submit" class="boton boton-primario boton-entrar">
+                    INGRESAR AL SISTEMA →
+                </button>
+            </form>
+
+            <p class="nota-acceso">
+                Acceso autorizado para usuarios registrados.
+            </p>
+        </div>
+    </section>
+
+    <!-- SISTEMA PRINCIPAL -->
+    <main class="contenedor" id="sistema" hidden>
+
+        <header class="encabezado">
+            <div class="marca">
+                <div class="logo">RP</div>
+                <div>
+                    <h2>RegistroPro</h2>
+                    <p>Sistema de gestión de registros</p>
+                </div>
+            </div>
+
+            <div class="acciones-encabezado">
+                <div class="estado-sistema">
+                    <span class="punto-verde"></span>
+                    <span id="rolActual">Sesión activa</span>
+                </div>
+
+                <button id="cerrarSesion" class="boton boton-secundario" type="button">
+                    ↪ Cerrar sesión
+                </button>
+            </div>
+        </header>
+
+        <section class="bienvenida">
+            <div>
+                <p class="etiqueta">PANEL DE CONTROL</p>
+                <h1>Gestión de <span>registros</span></h1>
+                <p class="subtitulo">
+                    Administra la información de forma sencilla y organizada.
+                </p>
+            </div>
+
+            <div class="tarjeta-total">
+                <span class="icono-total">▤</span>
+                <div>
+                    <p>Total registrados</p>
+                    <h2 id="total">0</h2>
+                </div>
+            </div>
+        </section>
+
+        <!-- FORMULARIO DE REGISTRO -->
+        <section class="panel">
+            <div class="titulo-panel">
+                <div>
+                    <p class="etiqueta">INFORMACIÓN PERSONAL</p>
+                    <h2>Registro de personas</h2>
+                    <p class="descripcion">
+                        Activa el formulario para comenzar a trabajar.
+                    </p>
+                </div>
+                <span class="etiqueta-numero">01</span>
+            </div>
+
+            <label class="activar-formulario">
+                <input type="checkbox" id="activar">
+                <span class="interruptor"></span>
+                <span>Activar formulario de registro</span>
+            </label>
+
+            <form id="formularioRegistro">
+                <div class="rejilla-formulario">
+                    <div class="campo">
+                        <label for="cedula">Cédula *</label>
+                        <input type="text" id="cedula"
+                            placeholder="Número de identificación" required disabled>
+                    </div>
+
+                    <div class="campo">
+                        <label for="nombre1">Primer nombre *</label>
+                        <input type="text" id="nombre1"
+                            placeholder="Primer nombre" required disabled>
+                    </div>
+
+                    <div class="campo">
+                        <label for="nombre2">Segundo nombre</label>
+                        <input type="text" id="nombre2"
+                            placeholder="Segundo nombre" disabled>
+                    </div>
+
+                    <div class="campo">
+                        <label for="apellido1">Primer apellido *</label>
+                        <input type="text" id="apellido1"
+                            placeholder="Primer apellido" required disabled>
+                    </div>
+
+                    <div class="campo">
+                        <label for="apellido2">Segundo apellido</label>
+                        <input type="text" id="apellido2"
+                            placeholder="Segundo apellido" disabled>
+                    </div>
+
+                    <div class="campo">
+                        <label for="telefono">Teléfono *</label>
+                        <input type="tel" id="telefono"
+                            placeholder="Número de teléfono" required disabled>
+                    </div>
+
+                    <div class="campo campo-completo">
+                        <label for="direccion">Dirección *</label>
+                        <input type="text" id="direccion"
+                            placeholder="Dirección de residencia" required disabled>
+                    </div>
+                </div>
+
+                <div class="acciones-formulario">
+                    <button type="button" id="guardar"
+                        class="boton boton-primario" disabled>✓ Guardar</button>
+
+                    <button type="button" id="consultar"
+                        class="boton boton-secundario" disabled>⌕ Consultar</button>
+
+                    <button type="button" id="editar"
+                        class="boton boton-secundario" disabled>✎ Editar</button>
+
+                    <button type="button" id="eliminar"
+                        class="boton boton-peligro" disabled>✕ Eliminar</button>
+
+                    <button type="button" id="limpiar"
+                        class="boton boton-secundario" disabled>Limpiar campos</button>
+                </div>
+
+                <p id="mensaje" class="mensaje" role="status">
+                    Activa el formulario para comenzar.
+                </p>
+            </form>
+        </section>
+
+        <!-- FUNCIONES EXCLUSIVAS DEL DUEÑO -->
+        <section id="zonaPropietario" hidden>
+            <div class="panel panel-registros">
+                <div class="titulo-panel">
+                    <div>
+                        <p class="etiqueta">ADMINISTRACIÓN</p>
+                        <h2>Registros guardados</h2>
+                        <p class="descripcion">
+                            Consulta, administra y exporta la información.
+                        </p>
+                    </div>
+                    <span class="etiqueta-numero">02</span>
+                </div>
+
+                <div class="acciones-tabla">
+                    <button type="button" id="mostrarTabla"
+                        class="boton boton-primario">▤ Mostrar tabla</button>
+
+                    <button type="button" id="descargarExcel"
+                        class="boton boton-excel">↓ Descargar Excel</button>
+                </div>
+
+                <div id="panelTabla" hidden>
+                    <div class="buscador">
+                        <label for="buscarTabla">Buscar en los registros</label>
+                        <input type="search" id="buscarTabla"
+                            placeholder="Escribe una cédula, nombre o apellido...">
+                    </div>
+
+                    <div class="contenedor-tabla">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Cédula</th>
+                                    <th>Nombre 1</th>
+                                    <th>Nombre 2</th>
+                                    <th>Apellido 1</th>
+                                    <th>Apellido 2</th>
+                                    <th>Teléfono</th>
+                                    <th>Dirección</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cuerpoTabla"></tbody>
+                        </table>
+                    </div>
+
+                    <p id="tablaVacia" class="tabla-vacia" hidden>
+                        No hay registros que coincidan con la búsqueda.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <footer class="pie">
+            <p>RegistroPro · Sistema de gestión de registros</p>
+        </footer>
+    </main>
+
+</body>
+</html>

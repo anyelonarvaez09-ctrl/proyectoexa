@@ -19,21 +19,31 @@
             <div class="logo logo-acceso">RP</div>
             <p class="etiqueta">SISTEMA DE GESTIÓN</p>
             <h1>Bienvenido a <span>RegistroPro</span></h1>
-            <p class="texto-acceso">Ingresa tu código de acceso para continuar.</p>
+            <p class="texto-acceso">Ingresa tus datos de acceso para continuar.</p>
 
             <form id="formularioAcceso">
-                <label for="codigoAcceso">Código de acceso</label>
+                <label for="usuarioAcceso">Nombre de usuario</label>
+                <input
+                    type="text"
+                    id="usuarioAcceso"
+                    placeholder="Ingresa tu usuario"
+                    autocomplete="username"
+                    required
+                >
+
+                <label for="contrasenaAcceso" style="margin-top: 16px;">
+                    Contraseña
+                </label>
                 <input
                     type="password"
-                    id="codigoAcceso"
-                    placeholder="Ingresa tu código"
-                    inputmode="numeric"
-                    autocomplete="off"
+                    id="contrasenaAcceso"
+                    placeholder="Ingresa tu contraseña"
+                    autocomplete="current-password"
                     required
                 >
 
                 <p id="errorAcceso" class="error-acceso" hidden>
-                    Código incorrecto. Inténtalo nuevamente.
+                    Usuario o contraseña incorrectos. Inténtalo nuevamente.
                 </p>
 
                 <button type="submit" class="boton boton-primario boton-entrar">
